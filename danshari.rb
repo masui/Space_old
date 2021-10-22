@@ -14,7 +14,7 @@ class Danshari
     @allfiles = []
     @allitems = []
 
-    token = ENV['GYAZO_TOKEN'] # .bash_profileに書いてある
+    token = ENV['GYAZO_TOKEN'] # .bash_profileなどに書いてある
     @gyazo = Gyazo::Client.new access_token: token
 
     list.each { |item|
@@ -81,6 +81,17 @@ class Danshari
         
         STDERR.puts "upload #{file} to Gyazo..."
         res = @gyazo.upload imagefile: file, created_at: time
+        gyazourl = res[:permalink_url]
+
+        attr['gyazourl'] = gyazourl
+      elsif file =~ /\.pdf$/i
+        attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
+        time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
+        
+        system "convert -density 300 -geometry 1000 '#{file}[0]' /tmp/danshari.jpg"
+        
+        STDERR.puts "upload /tmp/danshari to Gyazo..."
+        res = @gyazo.upload imagefile: "/tmp/danshari.jpg", created_at: time
         gyazourl = res[:permalink_url]
 
         attr['gyazourl'] = gyazourl
