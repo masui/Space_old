@@ -1,5 +1,8 @@
+require 'exifr/jpeg'
 require 'find'
 require 'json'
+require 'digest/md5'
+require 'gyazo'
 
 class Danshari
   attr :home, true
@@ -10,6 +13,9 @@ class Danshari
     @id = Time.now.strftime('%Y%m%d%H%M%S')
     @allfiles = []
     @allitems = []
+
+    token = ENV['GYAZO_TOKEN'] # .bash_profileに書いてある
+    @gyazo = Gyazo::Client.new access_token: token
 
     list.each { |item|
       if File.exist?(item)
@@ -32,9 +38,56 @@ class Danshari
     # STDERR.puts s3url
   end
 
+  def modtime(file)
+    time = File.mtime(file).strftime('%Y%m%d%H%M%S')
+  end
+
+  def getattr(file)
+    attr = {}
+
+    attr['filename'] = file
+
+    # MD5値
+    attr['md5'] = Digest::MD5.new.update(File.read(file)).to_s
+
+    # 時刻
+    attr['time'] = modtime(file)
+    if file =~ /(\w+)\.(jpg|jpeg)/i
+      begin
+        exif = EXIFR::JPEG.new(file)
+        t = exif.date_time
+        if t
+          attr['time'] = t.strftime("%Y%m%d%H%M%S")
+        end
+      rescue
+      end
+    end
+
+    # サイズ
+    attr['size'] = File.size(file)
+
+    # convert -density 300 -geometry 1000 test.pdf[0] test1.jpg
+
+    attr
+  end
+
   def exec
-    puts @allfiles
     @allfiles.each { |file|
+      attr = getattr(file)
+
+      if file =~ /\.(jpg|jpeg|png)$/i
+        attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
+        time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
+        
+        STDERR.puts "upload #{file} to Gyazo..."
+        res = @gyazo.upload imagefile: file, created_at: time
+        gyazourl = res[:permalink_url]
+
+        attr['gyazourl'] = gyazourl
+      end
+
+      puts attr
+
       upload(file)
     }
   end
@@ -48,12 +101,6 @@ end
 d = Danshari.new(ARGV)
 d.exec
 
-# # すべてファイルを処理
-# #
-# allfiles.each { |file|
-#   upload_S3(file)
-# }
-# 
 # puts "---"
 # danshari_files.each { |file|
 #   puts "mv #{file} dansharidir"
