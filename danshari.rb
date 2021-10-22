@@ -34,17 +34,19 @@ class Danshari
 
   def upload(file)
     STDERR.puts "ruby #{$home}/bin/upload #{file}"
-    # s3url = `ruby #{home}/bin/upload #{file}`.chomp
-    # STDERR.puts s3url
+    uploadurl = `ruby #{home}/bin/upload #{file}`.chomp.split(/\n/)[2] # ここいい加減
+    STDERR.puts uploadurl
+    uploadurl
   end
 
   def modtime(file)
     time = File.mtime(file).strftime('%Y%m%d%H%M%S')
   end
 
-  def getattr(file)
+  def general_attr(file)
     attr = {}
 
+    attr['fullname'] = File.expand_path(file)
     attr['filename'] = file
 
     # MD5値
@@ -72,9 +74,11 @@ class Danshari
   end
 
   def exec
+    attrs = []
     @allfiles.each { |file|
-      attr = getattr(file)
+      attr = general_attr(file)
 
+      # 特殊属性を追加
       if file =~ /\.(jpg|jpeg|png)$/i
         attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
         time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
@@ -97,10 +101,64 @@ class Danshari
         attr['gyazourl'] = gyazourl
       end
 
-      puts attr
+      # GPS情報
+      if file =~ /\.(jpg|jpeg)$/i
+        begin
+          exif = EXIFR::JPEG.new(file)
+          d = exif.gps_longitude
+          if d
+            long = d[0] + d[1] / 60 + d[2] / 3600
+            d = exif.gps_latitude
+            lat = d[0] + d[1] / 60 + d[2] / 3600
+            mapline = "[#{exif.gps_latitude_ref}#{lat.to_f},#{exif.gps_longitude_ref}#{long.to_f},Z14]"
+            attr['mapline'] = mapline
+          end
+        rescue
+        end
+      end
 
-      upload(file)
+      # テキストデータ
+      if `file #{file}` =~ /text/
+        text = File.read(file).split(/\n/)[0,10]
+        attr['text'] = text
+      end
+      
+
+      attr['uploadurl'] = upload(file)
+      
+      attrs.push(attr)
     }
+
+    # JSON生成
+    data = {}
+    pages = []
+    attrs.each { |attr|
+      obj = {}
+      title = "#{attr['filename']} - #{attr['md5'][0,6]}"
+      obj['title'] = title
+      lines = []
+      lines.push(title)
+      if attr['text']
+        attr['text'].each { |line|
+          lines.push(">#{line}")
+        }
+        lines.push("")
+      end
+      lines.push(attr['mapline']) if attr['mapline']
+      lines.push("[#{attr['fullname']} #{attr['uploadurl']}]")
+      lines.push("Date: #{attr['time']}") if attr['time']
+      lines.push("Size: #{attr['size']}") if attr['size']
+      lines.push("[#{attr['gyazourl']} #{attr['uploadurl']}]") if attr['gyazourl']
+      obj['lines'] = lines
+      pages.push(obj)
+    }
+    data['pages'] = pages
+
+    puts data.to_json
+    File.open("/Users/masui/Danshari/data#{@id}.json","w"){ |f|
+      f.puts data.to_json
+    }
+    
   end
 end
 
@@ -116,6 +174,5 @@ d.exec
 # danshari_files.each { |file|
 #   puts "mv #{file} dansharidir"
 # }
-
 
 
