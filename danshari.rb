@@ -46,8 +46,9 @@ class Danshari
   def general_attr(file)
     attr = {}
 
-    attr['fullname'] = File.expand_path(file)
     attr['filename'] = file
+    attr['fullname'] = File.expand_path(file)
+    attr['basename'] = File.basename(file)
 
     # MD5値
     attr['md5'] = Digest::MD5.new.update(File.read(file)).to_s
@@ -67,8 +68,6 @@ class Danshari
 
     # サイズ
     attr['size'] = File.size(file)
-
-    # convert -density 300 -geometry 1000 test.pdf[0] test1.jpg
 
     attr
   end
@@ -92,7 +91,7 @@ class Danshari
         attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
         time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
         
-        system "convert -density 300 -geometry 1000 '#{file}[0]' /tmp/danshari.jpg"
+        system "convert -density 300 -geometry 1000 '#{file}[0]' /tmp/danshari.jpg" # pdfimagesの方がいいのかも?
         
         STDERR.puts "upload /tmp/danshari to Gyazo..."
         res = @gyazo.upload imagefile: "/tmp/danshari.jpg", created_at: time
@@ -118,11 +117,13 @@ class Danshari
       end
 
       # テキストデータ
-      if `file #{file}` =~ /text/
-        text = File.read(file).split(/\n/)[0,10]
-        attr['text'] = text
+      begin
+        if `file #{file}`.force_encoding("UTF-8") =~ /text/
+          text = File.read(file).split(/\n/)[0,10]
+          attr['text'] = text
+        end
+      rescue
       end
-      
 
       attr['uploadurl'] = upload(file)
       
@@ -134,8 +135,10 @@ class Danshari
     pages = []
     attrs.each { |attr|
       obj = {}
-      title = "#{attr['filename']} - #{attr['md5'][0,6]}"
+      title = attr['basename']
+      title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
       obj['title'] = title
+
       lines = []
       lines.push(title)
       if attr['text']
@@ -162,6 +165,9 @@ class Danshari
   end
 end
 
+# puts ARGV.length
+# exit
+
 if ARGV.length == 0
   STDERR.puts "% danshari files"
   exit
@@ -169,10 +175,4 @@ end
 
 d = Danshari.new(ARGV)
 d.exec
-
-# puts "---"
-# danshari_files.each { |file|
-#   puts "mv #{file} dansharidir"
-# }
-
 
