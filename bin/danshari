@@ -151,7 +151,11 @@ class Danshari
       end
       lines.push(attr['mapline']) if attr['mapline']
       lines.push("[#{attr['fullname']} #{attr['uploadurl']}]")
-      lines.push("Date: #{attr['time']}") if attr['time']
+      if attr['time']
+        attr['time'] =~ /^(........)(.*)$/
+        s = "[#{$1}]#{$2}"
+        lines.push("Date: #{s}")
+      end
       lines.push("Size: #{attr['size']}") if attr['size']
       lines.push("[#{attr['gyazourl']} #{attr['uploadurl']}]") if attr['gyazourl']
       obj['lines'] = lines
