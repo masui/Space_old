@@ -143,6 +143,11 @@ class Danshari
 
       lines = []
       lines.push(title)
+      if attr['time']
+        attr['time'] =~ /^(........)(.*)$/
+        s = "[#{$1}]#{$2}"
+        lines.push("Date: #{s}")
+      end
       if attr['text']
         attr['text'].each { |line|
           lines.push(">#{line}")
@@ -150,29 +155,28 @@ class Danshari
         lines.push("")
       end
       lines.push(attr['mapline']) if attr['mapline']
-      lines.push("[#{attr['fullname']} #{attr['uploadurl']}]")
-      if attr['time']
-        attr['time'] =~ /^(........)(.*)$/
-        s = "[#{$1}]#{$2}"
-        lines.push("Date: #{s}")
-      end
+      lines.push("Path: [#{attr['fullname']} #{attr['uploadurl']}]")
+      lines.push("File: [#{attr['basename']}]") # 同じファイル名のものをリンクするため
       lines.push("Size: #{attr['size']}") if attr['size']
+      lines.push("Id: [#{@id}]")
       lines.push("[#{attr['gyazourl']} #{attr['uploadurl']}]") if attr['gyazourl']
       obj['lines'] = lines
       pages.push(obj)
     }
     data['pages'] = pages
 
-    puts data.to_json
+    json = data.to_json
+    puts json
     File.open("/Users/masui/Danshari/JSON/data#{@id}.json","w"){ |f|
-      f.puts data.to_json
+      f.puts json
     }
-    
+    File.open("/Users/masui/Danshari/JSON/danshari.json","w"){ |f|
+      f.puts json
+    }
+
+    system "open https://scrapbox.io/projects/masui-files/settings/page-data"
   end
 end
-
-# puts ARGV.length
-# exit
 
 if ARGV.length == 0
   STDERR.puts "% danshari files"
