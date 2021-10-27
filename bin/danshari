@@ -1,8 +1,12 @@
 #! /usr/bin/env ruby
 #
+# 謎ファイルを断捨離する
+#
 # % danshari file dir
 #
 # https://Scrapbox.io/file-danshari
+#
+# 増井の個人環境に依存するところが多すぎるのをなんとかしたい...
 #
 
 require 'exifr/jpeg'
@@ -13,11 +17,9 @@ require 'gyazo'
 require 'shellwords'
 
 class Danshari
-  attr :home, true
   attr_reader :id
 
   def initialize(list)
-    @home = ENV['HOME']
     @id = Time.now.strftime('%Y%m%d%H%M%S')
     @allfiles = []
     @allitems = []
@@ -31,7 +33,7 @@ class Danshari
         if File.directory?(item)
           puts "file <#{item}> is directory"
         end
-        Find.find(item) {|f|
+        Find.find(item) { |f|
           if File.file?(f)
             @allfiles.push f
           end
@@ -40,7 +42,7 @@ class Danshari
     }
   end
 
-  def upload(file)
+  def upload_s3(file)
     ext = ''
     if file =~ /^(.*)(\.\w+)$/ then
       ext = $2
@@ -54,12 +56,6 @@ class Danshari
     STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
     system "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
     "https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
-
-
-    #STDERR.puts "ruby #{$home}/bin/upload #{file}"
-    #uploadurl = `ruby #{home}/bin/upload #{file}`.chomp.split(/\n/)[2] # ここいい加減
-    #STDERR.puts uploadurl
-    #uploadurl
   end
 
   def modtime(file)
@@ -148,7 +144,7 @@ class Danshari
       rescue
       end
 
-      attr['uploadurl'] = upload(file)
+      attr['uploadurl'] = upload_s3(file)
       
       attrs.push(attr)
     }
