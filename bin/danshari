@@ -15,11 +15,16 @@ require 'json'
 require 'digest/md5'
 require 'gyazo'
 require 'shellwords'
+require 'uri'
+
+CONF = File.expand_path("~/.danshari")
+DEFAULT_PROJECT = "danshari-default"
 
 class Danshari
   attr_reader :id
 
-  def initialize(list)
+  def initialize(project,list)
+    @project = project
     @id = Time.now.strftime('%Y%m%d%H%M%S')
     @allfiles = []
     @allitems = []
@@ -54,7 +59,8 @@ class Danshari
     bucket = "masui.org"
     dstfile = "s3://#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
     STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
-    system "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
+    #system "USER=masui HOME=/Users/masui /usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
+    system "/usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
     "https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
   end
 
@@ -149,57 +155,123 @@ class Danshari
       attrs.push(attr)
     }
 
-    # JSON生成
-    data = {}
-    pages = []
+    # データ作成
+    str = ''
     attrs.each { |attr|
       obj = {}
-      title = attr['basename']
-      title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
-      obj['title'] = title
-
-      lines = []
-      lines.push(title)
+      # title = attr['basename']
+      # title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
+      # # str += "#{title}\n"
+      str += "[#{attr['fullname']} #{attr['uploadurl']}]\n"
+      if attr['text']
+        attr['text'].each { |line|
+          str += ">#{line}\n"
+        }
+      end
       if attr['time']
         attr['time'] =~ /^(........)(.*)$/
         s = "[#{$1}]#{$2}"
-        lines.push("Date: #{s}")
+        str += "Date: #{s}\n"
       end
-      if attr['text']
-        attr['text'].each { |line|
-          lines.push(">#{line}")
-        }
-        lines.push("")
-      end
-      lines.push(attr['mapline']) if attr['mapline']
-      lines.push("Path: [#{attr['fullname']} #{attr['uploadurl']}]")
-      lines.push("File: [#{attr['basename']}]") # 同じファイル名のものをリンクするため
-      lines.push("Size: #{attr['size']}") if attr['size']
-      lines.push("Id: [#{@id}]")
-      lines.push("[#{attr['gyazourl']} #{attr['uploadurl']}]") if attr['gyazourl']
-      obj['lines'] = lines
-      pages.push(obj)
+      str += "#{attr['mapline']}\n" if attr['mapline']
+      str += "File: [#{attr['basename']}]\n" # 同じファイル名のものをリンクするため
+      str += "Size: #{attr['size']}\n" if attr['size']
+      str += "[#{attr['gyazourl']} #{attr['uploadurl']}]\n" if attr['gyazourl']
+      str += "\n"
     }
-    data['pages'] = pages
+    # ゴミ箱へ
+    puts "allitems = #{@allitems}"
+    @allitems.each { |item|
+      puts "Delete #{item}"
+      path = File.expand_path(item)
+      next unless File.exist?(path)
+      script = <<EOF
+tell application "Finder"
+  move POSIX file "#{path}" to trash
+end tell
+EOF
+      system "osascript -e '#{script}'"
+    }
+    s = "https://Scrapbox.io/#{@project}/#{@id}?body=#{str}"
+    system "open 'https://Scrapbox.io/#{@project}/#{@id}?body=#{URI.encode_www_form_component(str)}'"
 
-    json = data.to_json
-    puts json
-    File.open("/Users/masui/Danshari/JSON/data#{@id}.json","w"){ |f|
-      f.puts json
-    }
-    File.open("/Users/masui/Danshari/JSON/danshari.json","w"){ |f|
-      f.puts json
-    }
+    
+    # JSON生成
+    if false 
+      data = {}
+      pages = []
+      attrs.each { |attr|
+        obj = {}
+        title = attr['basename']
+        title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
+        obj['title'] = title
+        lines = []
+        lines.push(title)
+        if attr['time']
+          attr['time'] =~ /^(........)(.*)$/
+          s = "[#{$1}]#{$2}"
+          lines.push("Date: #{s}")
+        end
+        if attr['text']
+          attr['text'].each { |line|
+            lines.push(">#{line}")
+          }
+          lines.push("")
+        end
+        lines.push(attr['mapline']) if attr['mapline']
+        lines.push("[#{attr['fullname']} #{attr['uploadurl']}]")
+        lines.push("File: [#{attr['basename']}]") # 同じファイル名のものをリンクするため
+        lines.push("Size: #{attr['size']}") if attr['size']
+        lines.push("Id: [#{@id}]")
+        lines.push("[#{attr['gyazourl']} #{attr['uploadurl']}]") if attr['gyazourl']
+        obj['lines'] = lines
+        pages.push(obj)
+      }
+      data['pages'] = pages
+      
+      json = data.to_json
+      puts json
+      File.open("/Users/masui/Danshari/JSON/data#{@id}.json","w"){ |f|
+        f.puts json
+      }
+      File.open("/Users/masui/Danshari/JSON/danshari.json","w"){ |f|
+        f.puts json
+      }
+      
 
-    system "open https://scrapbox.io/projects/masui-files/settings/page-data"
+      system "open https://scrapbox.io/projects/masui-files/settings/page-data"
+    end
   end
 end
 
+project = DEFAULT_PROJECT
+if File.exist?(CONF)
+  project = File.read(CONF).chomp
+end
+
+#File.open("/tmp/log","w"){ |f|
+#  f.puts project
+#}
+#
+#File.open("/tmp/log","a"){ |f|
+#  f.puts ARGV.length
+#}
+  
 if ARGV.length == 0
-  STDERR.puts "% danshari files"
+  script = <<EOF
+display dialog "情報をセーブするScrapboxプロジェクト名を入力してください" default button 2 default answer "#{project}"
+set tmpText to result
+set rText to text returned of tmpText
+EOF
+  project = `osascript -e '#{script}'`
+  if project != '' # キャンセルじゃない場合
+    project = DEFAULT_PROJECT if project == "\n" # 空文字列の場合
+    File.open(CONF,"w"){ |f|
+      f.puts project
+    }
+  end
   exit
 end
 
-d = Danshari.new(ARGV)
+d = Danshari.new(project,ARGV)
 d.exec
-
