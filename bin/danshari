@@ -30,6 +30,19 @@ class Danshari
     @allitems = []
 
     token = ENV['GYAZO_TOKEN'] # .bash_profileなどに書いてある
+    unless token
+      File.open(File.expand_path("~masui/.zshrc")){ |f|
+        f.each { |line|
+          line.chomp!
+          if line.force_encoding("UTF-8") =~ /GYAZO_TOKEN=([0-9a-f]+)$/ # 何故force_encoding?
+            token = $1
+            break
+          end
+        }
+      }
+    end
+
+    
     @gyazo = Gyazo::Client.new access_token: token
 
     list.each { |item|
@@ -58,8 +71,7 @@ class Danshari
     # 認証情報は ~/.aws/ にある
     bucket = "masui.org"
     dstfile = "s3://#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
-    STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
-    #system "USER=masui HOME=/Users/masui /usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
+    # STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
     system "/usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
     "https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
   end
@@ -107,7 +119,7 @@ class Danshari
         attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
         time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
         
-        STDERR.puts "upload #{file} to Gyazo..."
+        # STDERR.puts "upload #{file} to Gyazo..."
         res = @gyazo.upload imagefile: file, created_at: time
         gyazourl = res[:permalink_url]
 
@@ -115,12 +127,51 @@ class Danshari
       elsif file =~ /\.pdf$/i
         attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
         time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
+
+        # convertは綺麗に変換できない...
+        # system "/usr/local/bin/convert -density 300 -geometry 1000 '#{file}[0]' /tmp/danshari.jpg"
+        #
+        # STDERR.puts "upload /tmp/danshari to Gyazo..."
+        # res = @gyazo.upload imagefile: "/tmp/danshari.jpg", created_at: time
+
+        basename = File.basename(attr['fullname'])
+        File.open("/tmp/log","w"){ |f|
+          f.puts "basename = #{basename}"
+        }
+        name = basename.sub(/\.pdf$/i,'')
+        system "/bin/rm -r -f /Users/masui/Danshari/data"
+        system "mkdir /Users/masui/Danshari/data"
+        File.open("/tmp/log","a"){ |f|
+          f.puts "cmd = open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
+        }
+        #system "open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
+        #jpeg = "/Users/masui/Danshari/data/#{name}-ページ1.jpeg"
+
+        # 何故かAutomatorが日本語ファイルを受け付けない
+        system "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
+        File.open("/tmp/log","a"){ |f|
+          f.puts "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
+        }
+        system "open /Applications/pdf2jpeg.app --args /tmp/danshari.pdf"
+        jpeg = "/Users/masui/Danshari/data/danshari-ページ1.jpeg"
         
-        system "convert -density 300 -geometry 1000 '#{file}[0]' /tmp/danshari.jpg" # pdfimagesの方がいいのかも?
+        File.open("/tmp/log","a"){ |f|
+          f.puts "jpeg = #{jpeg}"
+        }
+        while !File.exist?(jpeg)
+          sleep 1
+        end
+
+        File.open("/tmp/log","a"){ |f|
+          f.puts "upload #{jpeg}to Gyazo..."
+        }
         
-        STDERR.puts "upload /tmp/danshari to Gyazo..."
-        res = @gyazo.upload imagefile: "/tmp/danshari.jpg", created_at: time
+        STDERR.puts "upload #{jpeg}to Gyazo..."
+        res = @gyazo.upload imagefile: jpeg, created_at: time
         gyazourl = res[:permalink_url]
+        File.open("/tmp/log","a"){ |f|
+          f.puts "gyazourl = #{gyazourl}"
+        }
 
         attr['gyazourl'] = gyazourl
       end
@@ -190,57 +241,10 @@ tell application "Finder"
   move POSIX file "#{path}" to trash
 end tell
 EOF
-      system "osascript -e '#{script}'"
+      system "/usr/bin/osascript -e '#{script}'"
     }
-    s = "https://Scrapbox.io/#{@project}/#{@id}?body=#{str}"
-    system "open 'https://Scrapbox.io/#{@project}/#{@id}?body=#{URI.encode_www_form_component(str)}'"
-
-    
-    # JSON生成
-    if false 
-      data = {}
-      pages = []
-      attrs.each { |attr|
-        obj = {}
-        title = attr['basename']
-        title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
-        obj['title'] = title
-        lines = []
-        lines.push(title)
-        if attr['time']
-          attr['time'] =~ /^(........)(.*)$/
-          s = "[#{$1}]#{$2}"
-          lines.push("Date: #{s}")
-        end
-        if attr['text']
-          attr['text'].each { |line|
-            lines.push(">#{line}")
-          }
-          lines.push("")
-        end
-        lines.push(attr['mapline']) if attr['mapline']
-        lines.push("[#{attr['fullname']} #{attr['uploadurl']}]")
-        lines.push("File: [#{attr['basename']}]") # 同じファイル名のものをリンクするため
-        lines.push("Size: #{attr['size']}") if attr['size']
-        lines.push("Id: [#{@id}]")
-        lines.push("[#{attr['gyazourl']} #{attr['uploadurl']}]") if attr['gyazourl']
-        obj['lines'] = lines
-        pages.push(obj)
-      }
-      data['pages'] = pages
-      
-      json = data.to_json
-      puts json
-      File.open("/Users/masui/Danshari/JSON/data#{@id}.json","w"){ |f|
-        f.puts json
-      }
-      File.open("/Users/masui/Danshari/JSON/danshari.json","w"){ |f|
-        f.puts json
-      }
-      
-
-      system "open https://scrapbox.io/projects/masui-files/settings/page-data"
-    end
+    # Scrapboxページ開く
+    system "/usr/bin/open 'https://Scrapbox.io/#{@project}/#{@id}?body=#{URI.encode_www_form_component(str)}'"
   end
 end
 
@@ -250,28 +254,27 @@ if File.exist?(CONF)
 end
 
 #File.open("/tmp/log","w"){ |f|
-#  f.puts project
+#  f.puts ARGV
 #}
-#
-#File.open("/tmp/log","a"){ |f|
-#  f.puts ARGV.length
-#}
-  
+
 if ARGV.length == 0
   script = <<EOF
 display dialog "情報をセーブするScrapboxプロジェクト名を入力してください" default button 2 default answer "#{project}"
 set tmpText to result
 set rText to text returned of tmpText
 EOF
-  project = `osascript -e '#{script}'`
+  project = `/usr/bin/osascript -e '#{script}'`
   if project != '' # キャンセルじゃない場合
     project = DEFAULT_PROJECT if project == "\n" # 空文字列の場合
-    File.open(CONF,"w"){ |f|
-      f.puts project
-    }
+    #File.open(CONF,"w"){ |f|
+    #  f.puts project
+    #}
   end
   exit
 end
 
+File.open("/tmp/log","a"){ |f|
+  f.puts project
+}
 d = Danshari.new(project,ARGV)
 d.exec
