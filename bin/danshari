@@ -67,12 +67,23 @@ class Danshari
     end
     hash = Digest::MD5.new.update(File.read(file)).to_s
 
-    # aws cp コマンドを使う
-    # 認証情報は ~/.aws/ にある
-    bucket = "masui.org"
-    dstfile = "s3://#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
-    # STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
-    system "/usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
+    begin
+      # aws cp コマンドを使う
+      # 認証情報は ~/.aws/ にある
+      bucket = "masui.org"
+      dstfile = "s3://#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
+      # STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
+
+      #system "/usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
+      #"https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
+      system "/bin/cp '#{file}' /tmp/danshari_file"
+      system "/usr/local/bin/aws s3 cp --profile default /tmp/danshari_file #{dstfile} --acl public-read "
+      "https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
+    rescue => e
+      File.open("/tmp/error","a"){ |f|
+        f.puts e
+      }
+    end
     "https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
   end
 
@@ -152,7 +163,7 @@ class Danshari
         File.open("/tmp/log","a"){ |f|
           f.puts "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
         }
-        system "open /Applications/pdf2jpeg.app --args /tmp/danshari.pdf"
+        system "/usr/bin/open /Applications/pdf2jpeg.app --args /tmp/danshari.pdf"
         jpeg = "/Users/masui/Danshari/data/danshari-ページ1.jpeg"
         
         File.open("/tmp/log","a"){ |f|
@@ -193,43 +204,73 @@ class Danshari
       end
 
       # テキストデータ
+      File.open("/tmp/error","w"){ |f|
+        f.puts attr['fullname']
+        f.puts "/usr/bin/file '#{attr['fullname']}'"
+      }
       begin
-        if `file #{file}`.force_encoding("UTF-8") =~ /text/
-          text = File.read(file).split(/\n/)[0,10]
+        s = `LANG=ja_JP.UTF-8 /usr/bin/file '#{attr['fullname']}'`.force_encoding("UTF-8")
+        File.open("/tmp/error","a"){ |f|
+          f.puts s
+        }
+
+        if `LANG=ja_JP.UTF-8 /usr/bin/file '#{attr['fullname']}'`.force_encoding("UTF-8") =~ /text/
+          File.open("/tmp/error","a"){ |f|
+            f.puts "This is a text file."
+          }
+          text = File.read(attr['fullname']).force_encoding("UTF-8").split(/\n/)[0,10]
+          File.open("/tmp/error","a"){ |f|
+            f.puts text
+          }
           attr['text'] = text
         end
-      rescue
+      rescue => e
+        File.open("/tmp/error","a"){ |f|
+          f.puts e
+        }
       end
 
       attr['uploadurl'] = upload_s3(file)
+
+      File.open("/tmp/error","a"){ |f|
+        f.puts "s3 upload success"
+        f.puts "file = #{attr['uploadurl']}"
+      }
       
       attrs.push(attr)
     }
 
     # データ作成
-    str = ''
+
+begin    
+    str = ''.force_encoding("UTF-8")
     attrs.each { |attr|
       obj = {}
       # title = attr['basename']
       # title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
       # # str += "#{title}\n"
-      str += "[#{attr['fullname']} #{attr['uploadurl']}]\n"
+      str += "[#{attr['fullname']} #{attr['uploadurl']}]\n".force_encoding("UTF-8")
       if attr['text']
         attr['text'].each { |line|
-          str += ">#{line}\n"
+          str += ">#{line}\n".force_encoding("UTF-8")
         }
       end
       if attr['time']
         attr['time'] =~ /^(........)(.*)$/
         s = "[#{$1}]#{$2}"
-        str += "Date: #{s}\n"
+        str += "Date: #{s}\n".force_encoding("UTF-8")
       end
-      str += "#{attr['mapline']}\n" if attr['mapline']
-      str += "File: [#{attr['basename']}]\n" # 同じファイル名のものをリンクするため
-      str += "Size: #{attr['size']}\n" if attr['size']
-      str += "[#{attr['gyazourl']} #{attr['uploadurl']}]\n" if attr['gyazourl']
-      str += "\n"
+      str += "#{attr['mapline']}\n".force_encoding("UTF-8") if attr['mapline']
+      str += "File: [#{attr['basename']}]\n".force_encoding("UTF-8") # 同じファイル名のものをリンクするため
+      str += "Size: #{attr['size']}\n".force_encoding("UTF-8") if attr['size']
+      str += "[#{attr['gyazourl']} #{attr['uploadurl']}]\n".force_encoding("UTF-8") if attr['gyazourl']
+      str += "\n".force_encoding("UTF-8")
     }
+rescue => e
+  File.open("/tmp/error","a"){ |f|
+    f.puts e
+  }
+end
     # ゴミ箱へ
     puts "allitems = #{@allitems}"
     @allitems.each { |item|
