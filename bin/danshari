@@ -145,41 +145,50 @@ class Danshari
         # STDERR.puts "upload /tmp/danshari to Gyazo..."
         # res = @gyazo.upload imagefile: "/tmp/danshari.jpg", created_at: time
 
-        basename = File.basename(attr['fullname'])
-        File.open("/tmp/log","w"){ |f|
-          f.puts "basename = #{basename}"
-        }
-        name = basename.sub(/\.pdf$/i,'')
-        system "/bin/rm -r -f /Users/masui/Danshari/data"
-        system "mkdir /Users/masui/Danshari/data"
-        File.open("/tmp/log","a"){ |f|
-          f.puts "cmd = open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
-        }
-        #system "open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
-        #jpeg = "/Users/masui/Danshari/data/#{name}-ページ1.jpeg"
-
-        # 何故かAutomatorが日本語ファイルを受け付けない
-        system "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
-        File.open("/tmp/log","a"){ |f|
-          f.puts "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
-        }
-        system "/usr/bin/open /Applications/pdf2jpeg.app --args /tmp/danshari.pdf"
-        # jpeg = "/Users/masui/Danshari/data/danshari-ページ1.jpeg"
-        jpeg = "/Users/masui/Danshari/data/danshari.jpeg"
-        
-        File.open("/tmp/log","a"){ |f|
-          f.puts "jpeg = #{jpeg}"
-        }
-        while !File.exist?(jpeg)
-          sleep 1
+        if false #automatorは嫌
+          basename = File.basename(attr['fullname'])
+          File.open("/tmp/log","w"){ |f|
+            f.puts "basename = #{basename}"
+          }
+          name = basename.sub(/\.pdf$/i,'')
+          system "/bin/rm -r -f /Users/masui/Danshari/data"
+          system "mkdir /Users/masui/Danshari/data"
+          File.open("/tmp/log","a"){ |f|
+            f.puts "cmd = open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
+          }
+          #system "open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
+          #jpeg = "/Users/masui/Danshari/data/#{name}-ページ1.jpeg"
+          
+          # 何故かAutomatorが日本語ファイルを受け付けない
+          system "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
+          File.open("/tmp/log","a"){ |f|
+            f.puts "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
+          }
+          system "/usr/bin/open /Applications/pdf2jpeg.app --args /tmp/danshari.pdf"
+          # jpeg = "/Users/masui/Danshari/data/danshari-ページ1.jpeg"
+          jpeg = "/Users/masui/Danshari/data/danshari.jpeg"
+          
+          File.open("/tmp/log","a"){ |f|
+            f.puts "jpeg = #{jpeg}"
+          }
+          while !File.exist?(jpeg)
+            sleep 1
+          end
+          
+          File.open("/tmp/log","a"){ |f|
+            f.puts "upload #{jpeg}to Gyazo..."
+          }
+          
+          STDERR.puts "upload #{jpeg}to Gyazo..."
+          res = @gyazo.upload imagefile: jpeg, created_at: time
         end
 
-        File.open("/tmp/log","a"){ |f|
-          f.puts "upload #{jpeg}to Gyazo..."
-        }
+        system "/usr/local/bin/pdftopng #{attr['fullname']} /tmp/__danshari"
+        png = "/tmp/__danshari-000001.png"
+        STDERR.puts "upload #{png} to Gyazo..."
+        res = @gyazo.upload imagefile: png, created_at: time
+        system "/bin/rm /tmp/__danshari*"
         
-        STDERR.puts "upload #{jpeg}to Gyazo..."
-        res = @gyazo.upload imagefile: jpeg, created_at: time
         gyazourl = res[:permalink_url]
         File.open("/tmp/log","a"){ |f|
           f.puts "gyazourl = #{gyazourl}"
