@@ -23,12 +23,8 @@ DEFAULT_PROJECT = "danshari-default"
 class Danshari
   attr_reader :id
 
-  def initialize(project,list)
-    @project = project
-    @id = Time.now.strftime('%Y%m%d%H%M%S')
-    @allfiles = []
-    @allitems = []
-
+  def gyazo_token
+    # Gyazoアップロードに必要なトークン
     token = ENV['GYAZO_TOKEN'] # .bash_profileなどに書いてある
     unless token
       File.open(File.expand_path("~masui/.zshrc")){ |f|
@@ -41,9 +37,16 @@ class Danshari
         }
       }
     end
+    token
+  end
 
+  def initialize(project,list)
+    @project = project
+    @id = Time.now.strftime('%Y%m%d%H%M%S')
+    @allfiles = []
+    @allitems = []
     
-    @gyazo = Gyazo::Client.new access_token: token
+    @gyazo = Gyazo::Client.new access_token: gyazo_token
 
     list.each { |item|
       if File.exist?(item)
@@ -70,14 +73,12 @@ class Danshari
     begin
       # aws cp コマンドを使う
       # 認証情報は ~/.aws/ にある
+      # ファイル名が日本語だとうまくいかないことがあるので別ファイルにコピーしてからアップロード
       bucket = "masui.org"
       dstfile = "s3://#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
-      # STDERR.puts "aws s3 cp #{Shellwords.escape(file)} #{dstfile} --acl public-read "
-
-      #system "/usr/local/bin/aws s3 cp --profile default #{Shellwords.escape(file)} #{dstfile} --acl public-read "
-      #"https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
-      system "/bin/cp '#{file}' /tmp/danshari_file"
-      system "/usr/local/bin/aws s3 cp --profile default /tmp/danshari_file #{dstfile} --acl public-read "
+      system "/bin/cp '#{file}' /tmp/__danshari_file"
+      system "/usr/local/bin/aws s3 cp --profile default /tmp/__danshari_file #{dstfile} --acl public-read "
+      system "/bin/rm /tmp/__danshari_file"
       "https://s3-ap-northeast-1.amazonaws.com/#{bucket}/#{hash[0]}/#{hash[1]}/#{hash}#{ext}"
     rescue => e
       File.open("/tmp/error","a"){ |f|
@@ -91,7 +92,7 @@ class Danshari
     time = File.mtime(file).strftime('%Y%m%d%H%M%S')
   end
 
-  def general_attr(file)
+  def file_attr(file)
     attr = {}
 
     attr['filename'] = file
@@ -117,128 +118,85 @@ class Danshari
     # サイズ
     attr['size'] = File.size(file)
 
+    # 特殊attr
+    if file =~ /\.(jpg|jpeg|png)$/i
+      attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
+      time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
+      
+      # STDERR.puts "upload #{file} to Gyazo..."
+      res = @gyazo.upload imagefile: file, created_at: time
+      gyazourl = res[:permalink_url]
+      
+      attr['gyazourl'] = gyazourl
+    elsif file =~ /\.pdf$/i
+      attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
+      time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
+      
+      # pdftopngでPDFを画像に変換
+      system "/usr/local/bin/pdftopng #{attr['fullname']} /tmp/__danshari"
+      png = "/tmp/__danshari-000001.png"
+      STDERR.puts "upload #{png} to Gyazo..."
+      res = @gyazo.upload imagefile: png, created_at: time
+      system "/bin/rm /tmp/__danshari*"
+      
+      gyazourl = res[:permalink_url]
+      File.open("/tmp/log","a"){ |f|
+        f.puts "gyazourl = #{gyazourl}"
+      }
+      
+      attr['gyazourl'] = gyazourl
+    end
+    
+    # GPS情報
+    if file =~ /\.(jpg|jpeg)$/i
+      begin
+        exif = EXIFR::JPEG.new(file)
+        d = exif.gps_longitude
+        if d
+          long = d[0] + d[1] / 60 + d[2] / 3600
+          d = exif.gps_latitude
+          lat = d[0] + d[1] / 60 + d[2] / 3600
+          mapline = "[#{exif.gps_latitude_ref}#{lat.to_f},#{exif.gps_longitude_ref}#{long.to_f},Z14]"
+          attr['mapline'] = mapline
+        end
+      rescue
+      end
+    end
+
+    # テキストデータ
+    File.open("/tmp/error","w"){ |f|
+      f.puts attr['fullname']
+      f.puts "/usr/bin/file '#{attr['fullname']}'"
+    }
+    begin
+      s = `LANG=ja_JP.UTF-8 /usr/bin/file '#{attr['fullname']}'`.force_encoding("UTF-8")
+      File.open("/tmp/error","a"){ |f|
+        f.puts s
+      }
+      
+      if `LANG=ja_JP.UTF-8 /usr/bin/file '#{attr['fullname']}'`.force_encoding("UTF-8") =~ /text/
+        File.open("/tmp/error","a"){ |f|
+          f.puts "This is a text file."
+        }
+        text = File.read(attr['fullname']).force_encoding("UTF-8").split(/\n/)[0,10]
+        File.open("/tmp/error","a"){ |f|
+          f.puts text
+        }
+        attr['text'] = text
+      end
+    rescue => e
+      File.open("/tmp/error","a"){ |f|
+        f.puts e
+      }
+    end
+
     attr
   end
 
   def exec
     attrs = []
     @allfiles.each { |file|
-      attr = general_attr(file)
-
-      # 特殊属性を追加
-      if file =~ /\.(jpg|jpeg|png)$/i
-        attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
-        time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
-        
-        # STDERR.puts "upload #{file} to Gyazo..."
-        res = @gyazo.upload imagefile: file, created_at: time
-        gyazourl = res[:permalink_url]
-
-        attr['gyazourl'] = gyazourl
-      elsif file =~ /\.pdf$/i
-        attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
-        time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
-
-        # convertは綺麗に変換できない...
-        # system "/usr/local/bin/convert -density 300 -geometry 1000 '#{file}[0]' /tmp/danshari.jpg"
-        #
-        # STDERR.puts "upload /tmp/danshari to Gyazo..."
-        # res = @gyazo.upload imagefile: "/tmp/danshari.jpg", created_at: time
-
-        if false #automatorは嫌
-          basename = File.basename(attr['fullname'])
-          File.open("/tmp/log","w"){ |f|
-            f.puts "basename = #{basename}"
-          }
-          name = basename.sub(/\.pdf$/i,'')
-          system "/bin/rm -r -f /Users/masui/Danshari/data"
-          system "mkdir /Users/masui/Danshari/data"
-          File.open("/tmp/log","a"){ |f|
-            f.puts "cmd = open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
-          }
-          #system "open /Applications/pdf2jpeg.app --args '#{attr['fullname']}'"
-          #jpeg = "/Users/masui/Danshari/data/#{name}-ページ1.jpeg"
-          
-          # 何故かAutomatorが日本語ファイルを受け付けない
-          system "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
-          File.open("/tmp/log","a"){ |f|
-            f.puts "/bin/cp '#{attr['fullname']}' /tmp/danshari.pdf"
-          }
-          system "/usr/bin/open /Applications/pdf2jpeg.app --args /tmp/danshari.pdf"
-          # jpeg = "/Users/masui/Danshari/data/danshari-ページ1.jpeg"
-          jpeg = "/Users/masui/Danshari/data/danshari.jpeg"
-          
-          File.open("/tmp/log","a"){ |f|
-            f.puts "jpeg = #{jpeg}"
-          }
-          while !File.exist?(jpeg)
-            sleep 1
-          end
-          
-          File.open("/tmp/log","a"){ |f|
-            f.puts "upload #{jpeg}to Gyazo..."
-          }
-          
-          STDERR.puts "upload #{jpeg}to Gyazo..."
-          res = @gyazo.upload imagefile: jpeg, created_at: time
-        end
-
-        system "/usr/local/bin/pdftopng #{attr['fullname']} /tmp/__danshari"
-        png = "/tmp/__danshari-000001.png"
-        STDERR.puts "upload #{png} to Gyazo..."
-        res = @gyazo.upload imagefile: png, created_at: time
-        system "/bin/rm /tmp/__danshari*"
-        
-        gyazourl = res[:permalink_url]
-        File.open("/tmp/log","a"){ |f|
-          f.puts "gyazourl = #{gyazourl}"
-        }
-
-        attr['gyazourl'] = gyazourl
-      end
-
-      # GPS情報
-      if file =~ /\.(jpg|jpeg)$/i
-        begin
-          exif = EXIFR::JPEG.new(file)
-          d = exif.gps_longitude
-          if d
-            long = d[0] + d[1] / 60 + d[2] / 3600
-            d = exif.gps_latitude
-            lat = d[0] + d[1] / 60 + d[2] / 3600
-            mapline = "[#{exif.gps_latitude_ref}#{lat.to_f},#{exif.gps_longitude_ref}#{long.to_f},Z14]"
-            attr['mapline'] = mapline
-          end
-        rescue
-        end
-      end
-
-      # テキストデータ
-      File.open("/tmp/error","w"){ |f|
-        f.puts attr['fullname']
-        f.puts "/usr/bin/file '#{attr['fullname']}'"
-      }
-      begin
-        s = `LANG=ja_JP.UTF-8 /usr/bin/file '#{attr['fullname']}'`.force_encoding("UTF-8")
-        File.open("/tmp/error","a"){ |f|
-          f.puts s
-        }
-
-        if `LANG=ja_JP.UTF-8 /usr/bin/file '#{attr['fullname']}'`.force_encoding("UTF-8") =~ /text/
-          File.open("/tmp/error","a"){ |f|
-            f.puts "This is a text file."
-          }
-          text = File.read(attr['fullname']).force_encoding("UTF-8").split(/\n/)[0,10]
-          File.open("/tmp/error","a"){ |f|
-            f.puts text
-          }
-          attr['text'] = text
-        end
-      rescue => e
-        File.open("/tmp/error","a"){ |f|
-          f.puts e
-        }
-      end
+      attr = file_attr(file)
 
       attr['uploadurl'] = upload_s3(file)
 
@@ -250,37 +208,37 @@ class Danshari
       attrs.push(attr)
     }
 
-    # データ作成
+    # Scrapboxテキスト作成
+    begin    
+      str = ''.force_encoding("UTF-8")
+      attrs.each { |attr|
+        obj = {}
+        # title = attr['basename']
+        # title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
+        # # str += "#{title}\n"
+        str += "[#{attr['fullname']} #{attr['uploadurl']}]\n".force_encoding("UTF-8")
+        if attr['text']
+          attr['text'].each { |line|
+            str += ">#{line}\n".force_encoding("UTF-8")
+          }
+        end
+        if attr['time']
+          attr['time'] =~ /^(........)(.*)$/
+          s = "[#{$1}]#{$2}"
+          str += "Date: #{s}\n".force_encoding("UTF-8")
+        end
+        str += "#{attr['mapline']}\n".force_encoding("UTF-8") if attr['mapline']
+        str += "File: [#{attr['basename']}]\n".force_encoding("UTF-8") # 同じファイル名のものをリンクするため
+        str += "Size: #{attr['size']}\n".force_encoding("UTF-8") if attr['size']
+        str += "[[#{attr['gyazourl']} #{attr['uploadurl']}]]\n".force_encoding("UTF-8") if attr['gyazourl']
+        str += "\n".force_encoding("UTF-8")
+      }
+    rescue => e
+      File.open("/tmp/error","a"){ |f|
+        f.puts e
+      }
+    end
 
-begin    
-    str = ''.force_encoding("UTF-8")
-    attrs.each { |attr|
-      obj = {}
-      # title = attr['basename']
-      # title += " - #{attr['md5'][0,6]}" if title !~ /[0-9a-f]{32}/
-      # # str += "#{title}\n"
-      str += "[#{attr['fullname']} #{attr['uploadurl']}]\n".force_encoding("UTF-8")
-      if attr['text']
-        attr['text'].each { |line|
-          str += ">#{line}\n".force_encoding("UTF-8")
-        }
-      end
-      if attr['time']
-        attr['time'] =~ /^(........)(.*)$/
-        s = "[#{$1}]#{$2}"
-        str += "Date: #{s}\n".force_encoding("UTF-8")
-      end
-      str += "#{attr['mapline']}\n".force_encoding("UTF-8") if attr['mapline']
-      str += "File: [#{attr['basename']}]\n".force_encoding("UTF-8") # 同じファイル名のものをリンクするため
-      str += "Size: #{attr['size']}\n".force_encoding("UTF-8") if attr['size']
-      str += "[[#{attr['gyazourl']} #{attr['uploadurl']}]]\n".force_encoding("UTF-8") if attr['gyazourl']
-      str += "\n".force_encoding("UTF-8")
-    }
-rescue => e
-  File.open("/tmp/error","a"){ |f|
-    f.puts e
-  }
-end
     # ゴミ箱へ
     puts "allitems = #{@allitems}"
     @allitems.each { |item|
@@ -294,6 +252,7 @@ end tell
 EOF
       system "/usr/bin/osascript -e '#{script}'"
     }
+
     # Scrapboxページ開く
     system "/usr/bin/open 'https://Scrapbox.io/#{@project}/#{@id}?body=#{URI.encode_www_form_component(str)}'"
   end
@@ -304,10 +263,6 @@ if File.exist?(CONF)
   project = File.read(CONF).chomp
 end
 
-#File.open("/tmp/log","w"){ |f|
-#  f.puts ARGV
-#}
-
 if ARGV.length == 0
   script = <<EOF
 display dialog "情報をセーブするScrapboxプロジェクト名を入力してください" default button 2 default answer "#{project}"
@@ -317,15 +272,9 @@ EOF
   project = `/usr/bin/osascript -e '#{script}'`
   if project != '' # キャンセルじゃない場合
     project = DEFAULT_PROJECT if project == "\n" # 空文字列の場合
-    #File.open(CONF,"w"){ |f|
-    #  f.puts project
-    #}
   end
   exit
 end
 
-File.open("/tmp/log","a"){ |f|
-  f.puts project
-}
 d = Danshari.new(project,ARGV)
 d.exec
