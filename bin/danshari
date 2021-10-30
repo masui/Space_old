@@ -1,12 +1,14 @@
 #! /usr/bin/env ruby
 #
-# 謎ファイルを断捨離する
+# 謎ファイルを断捨離するアプリ/コマンド
 #
 # % danshari file dir
 #
 # https://Scrapbox.io/file-danshari
 #
 # 増井の個人環境に依存するところが多すぎるのをなんとかしたい...
+#
+# Platypusで作ったアプリの場合何故かforce_encodingが必要になる...
 #
 
 require 'exifr/jpeg'
@@ -178,11 +180,15 @@ class Danshari
         File.open("/tmp/error","a"){ |f|
           f.puts "This is a text file."
         }
-        text = File.read(attr['fullname']).force_encoding("UTF-8").split(/\n/)[0,10]
+        text = File.read(attr['fullname']).force_encoding("UTF-8")
+        texts = text.split(/\n/)[0,10]
+        if text.length > 900
+          texts = text.split(/\n/)[0,2]
+        end
         File.open("/tmp/error","a"){ |f|
           f.puts text
         }
-        attr['text'] = text
+        attr['text'] = texts
       end
     rescue => e
       File.open("/tmp/error","a"){ |f|
