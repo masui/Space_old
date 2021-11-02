@@ -70,7 +70,8 @@ class Danshari
     if file =~ /^(.*)(\.\w+)$/ then
       ext = $2
     end
-    hash = Digest::MD5.new.update(File.read(file)).to_s
+    # hash = Digest::MD5.new.update(File.read(file)).to_s
+    hash = Digest::MD5.file(file).to_s
 
     begin
       # aws cp コマンドを使う
@@ -102,7 +103,8 @@ class Danshari
     attr['basename'] = File.basename(file)
 
     # MD5値
-    attr['md5'] = Digest::MD5.new.update(File.read(file)).to_s
+    # attr['md5'] = Digest::MD5.new.update(File.read(file)).to_s
+    attr['md5'] = Digest::MD5.file(file).to_s
 
     # 時刻
     #attr['time'] = modtime(file)
