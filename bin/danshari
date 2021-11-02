@@ -105,17 +105,19 @@ class Danshari
     attr['md5'] = Digest::MD5.new.update(File.read(file)).to_s
 
     # 時刻
-    attr['time'] = modtime(file)
+    #attr['time'] = modtime(file)
+    attr['time'] = File.mtime(file)
     if file =~ /(\w+)\.(jpg|jpeg)/i
       begin
         exif = EXIFR::JPEG.new(file)
         t = exif.date_time
         if t
-          attr['time'] = t.strftime("%Y%m%d%H%M%S")
+          attr['time'] = t
         end
       rescue
       end
     end
+    attr['time14'] = attr['time'].strftime("%Y%m%d%H%M%S")
 
     # サイズ
     attr['size'] = File.size(file)
@@ -133,7 +135,7 @@ class Danshari
       File.open("/tmp/log","a"){ |f|
         f.puts p "upload #{pngpath} to Gyazo..."
       }
-      res = @gyazo.upload imagefile: pngpath, created_at: time
+      res = @gyazo.upload imagefile: pngpath, created_at: attr['time']
       system "/bin/rm #{pngpath}"
       gyazourl = res[:permalink_url]
       attr['gyazourl'] = gyazourl
@@ -218,8 +220,8 @@ class Danshari
             str += ">#{line}\n".force_encoding("UTF-8")
           }
         end
-        if attr['time']
-          attr['time'] =~ /^(........)(.*)$/
+        if attr['time14']
+          attr['time14'] =~ /^(........)(.*)$/
           s = "[#{$1}]#{$2}"
           str += "Date: #{s}\n".force_encoding("UTF-8")
         end
