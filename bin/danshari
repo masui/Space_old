@@ -47,7 +47,7 @@ class Danshari
     @id = Time.now.strftime('%Y%m%d%H%M%S')
     @allfiles = []
     @allitems = []
-    
+
     @gyazo = Gyazo::Client.new access_token: gyazo_token
 
     list.each { |item|
@@ -133,10 +133,10 @@ class Danshari
     if File.exist?(pngpath)
       STDERR.puts "upload #{pngpath} to Gyazo..."
       File.open("/tmp/log","a"){ |f|
-        f.puts p "upload #{pngpath} to Gyazo..."
+        f.puts "upload #{pngpath} to Gyazo..."
       }
       res = @gyazo.upload imagefile: pngpath, created_at: attr['time']
-      system "/bin/rm #{pngpath}"
+      system "/bin/rm '#{pngpath}'"
       gyazourl = res[:permalink_url]
       attr['gyazourl'] = gyazourl
     end
@@ -193,7 +193,10 @@ class Danshari
 
   def exec
     attrs = []
+    puts @allfiles
     @allfiles.each { |file|
+      puts file
+      
       attr = file_attr(file)
 
       attr['uploadurl'] = upload_s3(file)
@@ -240,7 +243,6 @@ class Danshari
     # ゴミ箱へ
     puts "allitems = #{@allitems}"
     @allitems.each { |item|
-      puts "Delete #{item}"
       path = File.expand_path(item)
       next unless File.exist?(path)
       script = <<EOF
