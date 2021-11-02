@@ -135,7 +135,13 @@ class Danshari
       time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
       
       # pdftopngでPDFを画像に変換
-      system "/usr/local/bin/pdftopng #{attr['fullname']} /tmp/__danshari"
+      # brew install poppler でpdftopngができたりできなかったり
+      if File.exist?("/usr/local/bin/pdftopng")
+        system "/usr/local/bin/pdftopng #{attr['fullname']} /tmp/__danshari"
+      else
+        system "pdftoppm -f 1 -l 1 -jpeg >#{attr['fullname']} > /tmp/__danshari-000001.png"
+      end
+
       png = "/tmp/__danshari-000001.png"
       STDERR.puts "upload #{png} to Gyazo..."
       res = @gyazo.upload imagefile: png, created_at: time
@@ -278,6 +284,9 @@ EOF
   project = `/usr/bin/osascript -e '#{script}'`
   if project != '' # キャンセルじゃない場合
     project = DEFAULT_PROJECT if project == "\n" # 空文字列の場合
+    File.open(CONF,"w"){ |f|
+      f.puts project
+    }
   end
   exit
 end

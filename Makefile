@@ -1,3 +1,6 @@
+# brew install platypus
+# brew install poppler (pdftopngのため)
+
 app:
 	/bin/rm -r -f Danshari.app
 	cp bin/danshari .
