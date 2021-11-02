@@ -120,61 +120,23 @@ class Danshari
     # サイズ
     attr['size'] = File.size(file)
 
-    # 特殊attr
-    #if file =~ /\.(jpg|jpeg|png)$/i
-    #  attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
-    #  time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
-    #  
-    #  # STDERR.puts "upload #{file} to Gyazo..."
-    #  res = @gyazo.upload imagefile: file, created_at: time
-    #  gyazourl = res[:permalink_url]
-    #  attr['gyazourl'] = gyazourl
-
-    #else
-      qlcmd = "/usr/bin/qlmanage -t '#{attr['fullname']}' -s 1024 -x -o /tmp"
-      pngpath = "/tmp/#{attr['basename']}.png"
-      File.open("/tmp/log","w"){ |f|
-        f.puts qlcmd
-        f.puts pngpath
+    # qlmanageでサムネイル作成
+    qlcmd = "/usr/bin/qlmanage -t '#{attr['fullname']}' -s 1024 -x -o /tmp"
+    pngpath = "/tmp/#{attr['basename']}.png"
+    File.open("/tmp/log","w"){ |f|
+      f.puts qlcmd
+      f.puts pngpath
+    }
+    system qlcmd
+    if File.exist?(pngpath)
+      STDERR.puts "upload #{pngpath} to Gyazo..."
+      File.open("/tmp/log","a"){ |f|
+        f.puts p "upload #{pngpath} to Gyazo..."
       }
-      system qlcmd
-      if File.exist?(pngpath)
-        STDERR.puts "upload #{pngpath} to Gyazo..."
-        File.open("/tmp/log","a"){ |f|
-          f.puts p "upload #{pngpath} to Gyazo..."
-        }
-        res = @gyazo.upload imagefile: pngpath, created_at: time
-        system "/bin/rm #{pngpath}"
-        gyazourl = res[:permalink_url]
-        attr['gyazourl'] = gyazourl
-      end
-    #end
-    
-    if false
-      if file =~ /\.pdf$/i
-        attr['time'] =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/
-        time = Time.local($1.to_i,$2.to_i,$3.to_i,$4.to_i,$5.to_i,$6.to_i)
-        
-        # pdftopngでPDFを画像に変換
-        # brew install poppler でpdftopngができたりできなかったり
-        if File.exist?("/usr/local/bin/pdftopng")
-          system "/usr/local/bin/pdftopng #{attr['fullname']} /tmp/__danshari"
-        else
-          system "pdftoppm -f 1 -l 1 -jpeg >#{attr['fullname']} > /tmp/__danshari-000001.png"
-        end
-        
-        png = "/tmp/__danshari-000001.png"
-        STDERR.puts "upload #{png} to Gyazo..."
-        res = @gyazo.upload imagefile: png, created_at: time
-        system "/bin/rm /tmp/__danshari*"
-        
-        gyazourl = res[:permalink_url]
-        File.open("/tmp/log","a"){ |f|
-          f.puts "gyazourl = #{gyazourl}"
-        }
-        
-        attr['gyazourl'] = gyazourl
-      end
+      res = @gyazo.upload imagefile: pngpath, created_at: time
+      system "/bin/rm #{pngpath}"
+      gyazourl = res[:permalink_url]
+      attr['gyazourl'] = gyazourl
     end
     
     # GPS情報
