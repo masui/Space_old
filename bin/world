@@ -243,7 +243,8 @@ tell application "Finder"
   move POSIX file "#{path}" to trash
 end tell
 EOF
-      system "/usr/bin/osascript -e '#{script}'"
+      # 消さなくてもいいかも
+      # system "/usr/bin/osascript -e '#{script}'"
     }
 
     # Scrapboxページ開く
@@ -251,10 +252,14 @@ EOF
   end
 end
 
-project = 'masui-world'
+# project = 'masui-world'
+
+path = $0
+path =~ /\/([a-zA-Z\-\.]+)\.app\//
+project = $1
 
 if ARGV.length == 0
-  system "open https://Scrapbox.io/masui-world"
+  system "open https://Scrapbox.io/#{project}"
   exit
 end
 

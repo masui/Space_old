@@ -4,9 +4,10 @@
 .PHONY: world danshari
 
 world:
-	/bin/rm -r -f MasuiWorld.app
+	/bin/rm -r -f World.app
 	cp bin/world .
-	platypus --name MasuiWorld --interpreter /usr/bin/ruby --quit-after-execution --droppable --interface-type None --app-icon world.icns world
+	platypus --name World --interpreter /usr/bin/ruby --quit-after-execution --droppable --interface-type None --app-icon world.icns world
+	mv World.app masui-world.app
 
 danshari:
 	/bin/rm -r -f Danshari.app
