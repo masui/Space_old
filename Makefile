@@ -1,13 +1,13 @@
 # brew install platypus
 # brew install poppler (pdftopngのため)
 
-.PHONY: world danshari
+.PHONY: drawer danshari
 
-world:
-	/bin/rm -r -f World.app
-	cp bin/world .
-	platypus --name World --interpreter /usr/bin/ruby --quit-after-execution --droppable --interface-type None --app-icon world.icns world
-	mv World.app masui-world.app
+space:
+	/bin/rm -r -f Space.app
+	cp bin/space .
+	platypus --name Space --interpreter /usr/bin/ruby --quit-after-execution --droppable --interface-type None --app-icon space.icns space
+	mv Space.app masui-space.app
 
 danshari:
 	/bin/rm -r -f Danshari.app

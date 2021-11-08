@@ -1,8 +1,8 @@
 #! /usr/bin/env ruby
 #
-# masui-world
+# masui-space
 #
-# % masui-world file dir
+# % masui-space file dir
 #
 # Platypusで作ったアプリの場合何故かforce_encodingが必要になる?
 #
@@ -251,8 +251,6 @@ EOF
     system "/usr/bin/open 'https://Scrapbox.io/#{@project}/#{@id}?body=#{URI.encode_www_form_component(str)}'"
   end
 end
-
-# project = 'masui-world'
 
 path = $0
 path =~ /\/([a-zA-Z\-\.]+)\.app\//
